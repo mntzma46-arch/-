@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Copy of Copy of Copy of Copy of ChatBnit",
+  "description": "A modern AI-powered chat application allowing users to ask questions and receive grounded, up-to-date responses from the Gemini model. Features include text and voice chat, conversation history, and a sleek, themeable interface.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
