@@ -146,6 +146,28 @@ const App: React.FC = () => {
     localStorage.setItem(`chats_${currentUser.email}`, JSON.stringify(updatedChats));
   }, [activeChatId, chats, currentUser]);
 
+  const handleDeleteChat = useCallback((chatId: string) => {
+    if (!currentUser) return;
+
+    const updatedChats = chats.filter(chat => chat.id !== chatId);
+    setChats(updatedChats);
+    localStorage.setItem(`chats_${currentUser.email}`, JSON.stringify(updatedChats));
+
+    if (activeChatId === chatId) {
+      setActiveChatId(updatedChats.length > 0 ? updatedChats[0].id : null);
+    }
+  }, [chats, currentUser, activeChatId]);
+
+  const handleRenameChat = useCallback((chatId: string, newTitle: string) => {
+    if (!currentUser) return;
+
+    const updatedChats = chats.map(chat =>
+      chat.id === chatId ? { ...chat, title: newTitle } : chat
+    );
+    setChats(updatedChats);
+    localStorage.setItem(`chats_${currentUser.email}`, JSON.stringify(updatedChats));
+  }, [chats, currentUser]);
+
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
   };
@@ -175,6 +197,8 @@ const App: React.FC = () => {
               setViewMode('video');
               setIsSidebarOpen(false);
             }}
+            onDeleteChat={handleDeleteChat}
+            onRenameChat={handleRenameChat}
             isOpen={isSidebarOpen}
             onClose={() => setIsSidebarOpen(false)}
         />

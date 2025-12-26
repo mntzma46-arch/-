@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { LiveServerMessage } from '@google/genai';
 import { connectLiveSession, createPcmBlob, decode, decodeAudioData, LiveSession } from '../services/geminiService';
-import { BotIcon, ChevronLeftIcon, MicIcon, PhoneIcon, StopIcon, UserIcon, MenuIcon, WomanIcon, ThumbsUpIcon, ThumbsDownIcon } from './Icons';
+import { BotIcon, ChevronLeftIcon, MicIcon, PhoneIcon, StopIcon, UserIcon, MenuIcon, WomanIcon, ThumbsUpIcon, ThumbsDownIcon, SettingsIcon, CloseIcon } from './Icons';
 import type { Persona } from '../types';
 import { PERSONAS } from '../constants';
 
@@ -26,8 +26,82 @@ type TranscriptItem = {
   feedback?: 'liked' | 'disliked';
 };
 
-const VAD_ENERGY_THRESHOLD = 0.01;
-const VAD_SILENCE_TIMEOUT = 800; // Increased for more natural pauses
+type AudioSettings = {
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
+};
+
+const VAD_ENERGY_THRESHOLD = 0.005;
+const VAD_SILENCE_TIMEOUT = 500; // Reduced for faster response times
+
+const AudioSettingsModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    settings: AudioSettings;
+    onSettingsChange: (newSettings: AudioSettings) => void;
+}> = ({ isOpen, onClose, settings, onSettingsChange }) => {
+    if (!isOpen) return null;
+
+    const handleToggle = (key: keyof AudioSettings) => {
+        onSettingsChange({ ...settings, [key]: !settings[key] });
+    };
+    
+    const ToggleSwitch: React.FC<{ label: string; enabled: boolean; onChange: () => void; description: string; }> = ({ label, enabled, onChange, description }) => (
+        <div>
+            <div className="flex items-center justify-between">
+                <span className="text-gray-200 font-medium">{label}</span>
+                <button
+                    onClick={onChange}
+                    className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${
+                        enabled ? 'bg-primary-500' : 'bg-gray-600'
+                    }`}
+                >
+                    <span
+                        className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${
+                            enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                    />
+                </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">{description}</p>
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={onClose}>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm relative border border-gray-700" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-white">إعدادات الصوت</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                        <CloseIcon />
+                    </button>
+                </div>
+                <div className="space-y-4">
+                    <ToggleSwitch 
+                        label="إلغاء الضوضاء"
+                        enabled={settings.noiseSuppression}
+                        onChange={() => handleToggle('noiseSuppression')}
+                        description="يقلل من ضوضاء الخلفية مثل المراوح أو النقرات."
+                    />
+                    <ToggleSwitch 
+                        label="إلغاء الصدى"
+                        enabled={settings.echoCancellation}
+                        onChange={() => handleToggle('echoCancellation')}
+                        description="يمنع صوت السماعات من أن يتم التقاطه بواسطة الميكروفون."
+                    />
+                    <ToggleSwitch 
+                        label="ضبط الحساسية التلقائي"
+                        enabled={settings.autoGainControl}
+                        onChange={() => handleToggle('autoGainControl')}
+                        description="يقوم تلقائياً بضبط مستوى صوت الميكروفون الخاص بك."
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, persona }) => {
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
@@ -35,7 +109,16 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
   const [currentInput, setCurrentInput] = useState('');
   const [currentOutput, setCurrentOutput] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => {
+    try {
+        const saved = localStorage.getItem('audioSettings');
+        return saved ? JSON.parse(saved) : { noiseSuppression: true, echoCancellation: true, autoGainControl: true };
+    } catch {
+        return { noiseSuppression: true, echoCancellation: true, autoGainControl: true };
+    }
+  });
+
   const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -49,6 +132,10 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcript, currentInput, currentOutput]);
+
+  useEffect(() => {
+    localStorage.setItem('audioSettings', JSON.stringify(audioSettings));
+  }, [audioSettings]);
   
   const handleSetFeedback = (id: string, feedback: 'liked' | 'disliked') => {
     setTranscript(prev => prev.map(item => 
@@ -121,13 +208,7 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
 
 
     try {
-      const constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      };
+      const constraints = { audio: audioSettings };
       mediaStreamRef.current = await navigator.mediaDevices.getUserMedia(constraints);
       
       inputAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -143,7 +224,7 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
           setStatus('connected');
           if (!mediaStreamRef.current || !inputAudioContextRef.current) return;
           const source = inputAudioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
-          scriptProcessorRef.current = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
+          scriptProcessorRef.current = inputAudioContextRef.current.createScriptProcessor(1024, 1, 1);
           
           scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
             const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
@@ -213,6 +294,15 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
                 nextStartTimeRef.current += audioBuffer.duration;
                 sourcesRef.current.add(source);
             }
+
+            const interrupted = message.serverContent?.interrupted;
+            if (interrupted) {
+                for (const source of sourcesRef.current.values()) {
+                    source.stop();
+                    sourcesRef.current.delete(source);
+                }
+                nextStartTimeRef.current = 0;
+            }
         },
         onerror: (e) => {
           console.error('Session error:', e);
@@ -231,7 +321,7 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
     } catch (err) {
       console.error('Failed to start voice session:', err);
       setStatus('error');
-      alert('لم نتمكن من الوصول إلى الميكروفون. يرجى التحقق من الأذونات.');
+      alert('لم نتمكن من الوصول إلى الميكروفون. يرجى التحقق من الأذونات والإعدادات.');
     }
   };
 
@@ -246,6 +336,12 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
 
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white relative">
+      <AudioSettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={audioSettings}
+        onSettingsChange={setAudioSettings}
+      />
       <header className="flex items-center p-4 bg-gray-800/50 justify-between">
         <div className="flex items-center">
             <button onClick={onExit} className="p-2 rounded-full hover:bg-gray-700">
@@ -253,9 +349,14 @@ const VoiceChatView: React.FC<VoiceChatViewProps> = ({ onExit, onMenuClick, pers
             </button>
             <h1 className="text-xl font-bold mr-4">محادثة صوتية ({PERSONAS[persona].name})</h1>
         </div>
-        <button onClick={onMenuClick} className="p-2 rounded-full hover:bg-gray-700">
-            <MenuIcon />
-        </button>
+        <div className="flex items-center gap-2">
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-gray-700">
+                <SettingsIcon />
+            </button>
+            <button onClick={onMenuClick} className="p-2 rounded-full hover:bg-gray-700">
+                <MenuIcon />
+            </button>
+        </div>
       </header>
       
       <main className="flex-1 overflow-y-auto p-6 space-y-4">

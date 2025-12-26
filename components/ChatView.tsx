@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { Chat, Message, Part, Persona, GroundingChunk } from '../types';
+import type { Chat, Message, Part, Persona, GroundingChunk, TextPart } from '../types';
 import { generateGroundedResponseStream, generateContentWithImage } from '../services/geminiService';
 import { PERSONAS } from '../constants';
 import { BotIcon, SendIcon, UserIcon, PaperclipIcon, CloseIcon, DownloadIcon, MenuIcon, ChevronDownIcon, CopyIcon, CheckIcon, ThumbsUpIcon, ThumbsDownIcon, RefreshIcon } from './Icons';
@@ -479,6 +479,24 @@ const ChatMessage: React.FC<{
 }> = React.memo(({ message, onSetFeedback, onRegenerate }) => {
     const isUser = message.role === 'user';
     const formattedTime = new Date(message.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = useCallback(() => {
+        if (copied) return;
+        const textToCopy = message.parts
+            .filter((p): p is TextPart => 'text' in p && !!p.text)
+            .map(p => p.text)
+            .join('\n\n');
+        
+        if (textToCopy) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            });
+        }
+    }, [message.parts, copied]);
+
+    const hasTextToCopy = message.parts.some(p => 'text' in p && !!p.text);
 
     const renderPart = (part: Part, index: number) => {
         if ('text' in part && part.text) {
@@ -523,12 +541,12 @@ const ChatMessage: React.FC<{
     };
     
     return (
-        <div className={`flex items-start gap-4 ${isUser ? 'flex-row-reverse' : ''} group relative`}>
+        <div className={`flex items-start gap-4 ${isUser ? 'flex-row-reverse' : ''} group relative animate-fade-in-up`}>
              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isUser ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gradient-to-br from-primary-400 to-primary-600'}`}>
                 {isUser ? <UserIcon className="w-6 h-6 text-gray-700 dark:text-gray-200"/> : <BotIcon className="w-6 h-6 text-white" />}
              </div>
              <div className="space-y-2">
-                <div className={`p-4 rounded-2xl max-w-lg min-w-0 ${isUser ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-br-none' : 'bg-gray-100 dark:bg-gray-800 rounded-bl-none'}`}>
+                <div className={`p-4 rounded-2xl max-w-lg min-w-0 transition-transform duration-300 group-hover:scale-[1.02] ${isUser ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-br-none' : 'bg-gray-100 dark:bg-gray-800 rounded-bl-none'}`}>
                     <div className="prose prose-sm dark:prose-invert max-w-none space-y-2">
                         {message.parts.map(renderPart).filter(Boolean)}
                     </div>
@@ -545,18 +563,24 @@ const ChatMessage: React.FC<{
                          </div>
                      )}
                 </div>
-                 <div className={`flex items-center gap-4 transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                 <div className={`flex items-center gap-2 transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100 ${isUser ? 'justify-end' : 'justify-start'}`}>
                     <span className="text-xs text-gray-400 dark:text-gray-500">{formattedTime}</span>
                     {!isUser && (
                         <div className="flex items-center gap-1">
-                            <button onClick={() => onSetFeedback(message.id, 'liked')} className={`p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${message.feedback === 'liked' ? 'text-primary-500' : 'text-gray-400'}`}>
-                                <ThumbsUpIcon className="w-4 h-4"/>
+                            {hasTextToCopy && (
+                                <button onClick={handleCopy} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 ${copied ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {copied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+                                    {copied ? 'تم النسخ' : 'نسخ'}
+                                </button>
+                            )}
+                            <button onClick={() => onSetFeedback(message.id, 'liked')} className={`text-xs px-2 py-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 ${message.feedback === 'liked' ? 'text-primary-600 dark:text-primary-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
+                                أعجبني
                             </button>
-                            <button onClick={() => onSetFeedback(message.id, 'disliked')} className={`p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${message.feedback === 'disliked' ? 'text-red-500' : 'text-gray-400'}`}>
-                                <ThumbsDownIcon className="w-4 h-4" />
+                            <button onClick={() => onSetFeedback(message.id, 'disliked')} className={`text-xs px-2 py-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 ${message.feedback === 'disliked' ? 'text-red-600 dark:text-red-500 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
+                                لم يعجبني
                             </button>
-                            <button onClick={() => onRegenerate(message.id)} className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400">
-                                <RefreshIcon className="w-4 h-4" />
+                            <button onClick={() => onRegenerate(message.id)} className="text-xs px-2 py-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                إعادة إنشاء
                             </button>
                         </div>
                     )}

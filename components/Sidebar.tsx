@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { User, Chat } from '../types';
-import { BotIcon, ChatIcon, LogoutIcon, MoonIcon, PlusIcon, SunIcon, UserIcon, InfoIcon, CloseIcon, PhoneIcon, VideoIcon } from './Icons';
+import { BotIcon, ChatIcon, LogoutIcon, MoonIcon, PlusIcon, SunIcon, UserIcon, InfoIcon, CloseIcon, PhoneIcon, VideoIcon, SearchIcon, EditIcon, TrashIcon } from './Icons';
 
 interface SidebarProps {
   user: User;
@@ -15,6 +15,8 @@ interface SidebarProps {
   onStartVideoChat: () => void;
   isOpen: boolean;
   onClose: () => void;
+  onDeleteChat: (id: string) => void;
+  onRenameChat: (id: string, newTitle: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -30,8 +32,26 @@ const Sidebar: React.FC<SidebarProps> = ({
   onStartVideoChat,
   isOpen,
   onClose,
+  onDeleteChat,
+  onRenameChat
 }) => {
   const [isDeveloperInfoOpen, setDeveloperInfoOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+  const [chatToRename, setChatToRename] = useState<Chat | null>(null);
+  const [newTitle, setNewTitle] = useState('');
+
+  const filteredChats = chats.filter(chat => {
+    const term = searchTerm.toLowerCase();
+    if (!term) return true;
+    const titleMatch = chat.title.toLowerCase().includes(term);
+    const messageMatch = chat.messages.some(message =>
+        message.parts.some(part =>
+            'text' in part && part.text.toLowerCase().includes(term)
+        )
+    );
+    return titleMatch || messageMatch;
+  });
   
   return (
     <>
@@ -61,25 +81,65 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
+        <div className="p-2">
+            <div className="relative">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <SearchIcon className="w-4 h-4 text-gray-400" />
+                </div>
+                <input
+                    type="text"
+                    placeholder="ابحث..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full p-2 pr-10 text-sm text-gray-900 bg-gray-200 border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                />
+                {searchTerm && (
+                    <button
+                        onClick={() => setSearchTerm('')}
+                        className="absolute inset-y-0 left-0 flex items-center pl-3"
+                        aria-label="Clear search"
+                    >
+                        <CloseIcon className="w-4 h-4 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" />
+                    </button>
+                )}
+            </div>
+        </div>
+
         <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-          {chats.map(chat => (
-            <a
-              key={chat.id}
-              href="#"
-              onClick={(e) => {
-                  e.preventDefault();
-                  onSelectChat(chat.id);
-              }}
-              className={`flex items-center gap-3 p-3 rounded-lg text-right text-sm transition-colors ${
-                activeChatId === chat.id
-                  ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400'
-                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-                  : `hover:bg-gray-200 dark:hover:bg-gray-700`
-              }`}
-            >
-              <ChatIcon />
-              <span className="truncate flex-1">{chat.title}</span>
-            </a>
+          {filteredChats.map(chat => (
+            <div key={chat.id} className="group relative">
+                <a
+                  href="#"
+                  onClick={(e) => {
+                      e.preventDefault();
+                      onSelectChat(chat.id);
+                  }}
+                  className={`flex items-center gap-3 p-3 rounded-lg text-right text-sm transition-colors w-full ${
+                    activeChatId === chat.id
+                      ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400'
+                      : `hover:bg-gray-200 dark:hover:bg-gray-700`
+                  }`}
+                >
+                  <ChatIcon />
+                  <span className="truncate flex-1">{chat.title}</span>
+                </a>
+                <div className="absolute top-1/2 left-2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                        onClick={() => { setChatToRename(chat); setNewTitle(chat.title); }}
+                        className="px-2 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+                        title="إعادة تسمية"
+                    >
+                        إعادة تسمية
+                    </button>
+                    <button
+                        onClick={() => setChatToDelete(chat)}
+                        className="px-2 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-red-600 dark:text-red-400 rounded-md hover:bg-red-500 hover:text-white dark:hover:bg-red-500"
+                        title="حذف"
+                    >
+                        حذف
+                    </button>
+                </div>
+            </div>
           ))}
         </nav>
 
@@ -117,6 +177,58 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div className="space-y-2 text-sm">
                     <p><span className="font-semibold">الاسم:</span> منة الله محمد مصطفى</p>
                     <p><span className="font-semibold">البريد الإلكتروني:</span> <a href="mailto:mntzma46@gmail.com" className="text-primary-500 hover:underline">mntzma46@gmail.com</a></p>
+                </div>
+            </div>
+        </div>
+      )}
+      {chatToRename && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setChatToRename(null)}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">إعادة تسمية المحادثة</h3>
+                <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (newTitle.trim()) {
+                        onRenameChat(chatToRename.id, newTitle.trim());
+                    }
+                    setChatToRename(null);
+                }}>
+                    <input
+                        type="text"
+                        value={newTitle}
+                        onChange={(e) => setNewTitle(e.target.value)}
+                        className="w-full p-2 text-sm text-gray-900 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                        autoFocus
+                    />
+                    <div className="mt-4 flex justify-end gap-2">
+                        <button type="button" onClick={() => setChatToRename(null)} className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600">
+                            إلغاء
+                        </button>
+                        <button type="submit" className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700">
+                            حفظ
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
+      {chatToDelete && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setChatToDelete(null)}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">هل أنت متأكد؟</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">سيتم حذف المحادثة "{chatToDelete.title}" نهائياً.</p>
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => setChatToDelete(null)} className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 w-24">
+                        إلغاء
+                    </button>
+                    <button
+                        onClick={() => {
+                            onDeleteChat(chatToDelete.id);
+                            setChatToDelete(null);
+                        }}
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 w-24"
+                    >
+                        حذف
+                    </button>
                 </div>
             </div>
         </div>

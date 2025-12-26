@@ -30,7 +30,7 @@ export const generateGroundedResponseStream = async (
 
 
     const responseStream = await genAI.models.generateContentStream({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-flash-lite-latest',
       contents: [...historyForApi, { role: 'user', parts: [{text: prompt}]}],
       config: {
         systemInstruction: systemInstruction,
@@ -71,17 +71,15 @@ export const generateContentWithImage = async (
         
         // Send only the last 20 messages to keep the payload small and fast
         const recentHistory = history.slice(-20);
+        // FIX: Cleaned up history mapping to prevent potential issues.
         const historyForApi: Content[] = recentHistory.map(msg => ({
             role: msg.role,
             parts: msg.parts.map(p => {
                 if ('text' in p) {
                     return { text: p.text };
                 }
-                if ('inlineData' in p) {
-                    return { inlineData: p.inlineData };
-                }
-                return { text: '' };
-            }).filter(p => 'text' in p ? p.text : p.inlineData)
+                return { inlineData: p.inlineData };
+            })
         }));
 
         const config: { responseModalities?: Modality[] } = {};
